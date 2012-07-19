@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /*
 Plugin Name: WooCommerce PagSeguro
 Plugin URI: http://felipematos.com/loja
@@ -235,14 +235,14 @@ function gateway_pagseguro(){
           }
         }
       }
-      $pagseguro_args['item_frete_1'] = $order->get_total_tax();
+      $pagseguro_args['item_frete_1'] = $order->get_shipping();
       $pagseguro_args_array = array();
 
       foreach ($pagseguro_args as $key => $value) {
         $pagseguro_args_array[] = '<input type="hidden" name="'.esc_attr( $key ).'" value="'.esc_attr( $value ).'" />';
       }
       
-      
+    
       $woocommerce->add_inline_js('
         jQuery("body").block({ 
             message: "<img src=\"'.esc_url( $woocommerce->plugin_url() ).'/assets/images/ajax-loader.gif\" alt=\"Redirecting...\" style=\"float:left; margin-right: 10px;\" />'.__('Obrigado pela compra. Estamos transferindo para o PagSeguro para realizar o pagamento.', 'woothemes').'", 
@@ -264,7 +264,7 @@ function gateway_pagseguro(){
         jQuery("#submit_pagseguro_payment_form").click();
       ');
       
-      
+    
       
       $payment_form = '<form action="'.esc_url( $pagseguro_url ).'" method="post" id="paypal_payment_form">
               ' . implode('', $pagseguro_args_array) . '
@@ -384,13 +384,13 @@ function gateway_pagseguro(){
 
         // We are here so lets check status and do actions
         switch (strtolower($posted['StatusTransacao'])){
-          case 'completo':
+          case 'aprovado':
             // Check valid txn_type
             //$accepted_types = array('cart', 'instant', 'express_checkout', 'web_accept', 'masspay', 'send_money');
             //if (!in_array(strtolower($posted['txn_type']), $accepted_types)) exit;
             
             // Payment completed
-            $order->add_order_note( __('Pagamento via PagSeguro Completado', 'woothemes') );
+            $order->add_order_note( __('Pagamento aprovado pelo PagSeguro. Aguardando compensação', 'woothemes') );
             $order->payment_complete();
             
             // Store PP Details
@@ -399,24 +399,25 @@ function gateway_pagseguro(){
             update_post_meta( (int) $posted['Referencia'], 'Código Transação', $posted['TransacaoID']);
             update_post_meta( (int) $posted['Referencia'], 'Método Pagamento', $posted['TipoPagamento']);
             update_post_meta( (int) $posted['Referencia'], 'Data Transação', $posted['DataTransacao']); 
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pagamento confirmado e pedido atualizado');
+            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento confirmado e pedido atualizado');
             
             break;
           case 'aguardando pagto':
             $order->update_status('on-hold','Aguardando confirmação de pagamento do PagSeguro');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Aguardando confirmação de pagamento do PagSeguro');
+            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Aguardando confirmação de pagamento do PagSeguro');
             break;
-          case 'aprovado':
-            $order->update_status('processing','Pagamento aprovado pelo PagSeguro. Aguardando compensação.');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pagamento aprovado pelo PagSeguro. Aguardando compensação.');
+          case 'completo':
+            $order->add_order_note( __('Pagamento pelo PagSeguro compensado e transação finalizada.', 'woothemes') );
+            //$order->update_status('processing','Pagamento aprovado pelo PagSeguro. Aguardando compensação.');
+            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento pelo PagSeguro compensado e transação finalizada.');
             break;
           case utf8_decode('em análise'):
             $order->update_status('processing','Pagamento aprovado pelo PagSeguro. Aguardando análise.');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pagamento aprovado pelo PagSeguro. Aguardando análise.');
+            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento aprovado pelo PagSeguro. Aguardando análise.');
             break;
           case 'cancelado':
             $order->update_status('failed', sprintf(__('Pagamento %s foi recusado pelo Pagseguro.', 'woothemes'), strtolower($posted['StatusTransacao']) ) );
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pagamento recusado pelo PagSeguro');
+            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento recusado pelo PagSeguro');
             break;
           default:
             // No action
