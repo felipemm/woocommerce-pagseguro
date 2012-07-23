@@ -236,7 +236,7 @@ function gateway_pagseguro(){
         }
       }
       $pagseguro_args['item_frete_1'] = $order->get_shipping();
-	  $pagseguro_args['extras'] = ((int)$order->get_total_discount())*-100;
+	  $pagseguro_args['extras'] = number_format($order->get_total_discount(),2,"","")*-1;
 	  
 	  
       $pagseguro_args_array = array();
