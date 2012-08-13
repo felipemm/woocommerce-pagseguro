@@ -273,21 +273,27 @@ function gateway_pagseguro(){
 
       		$code = (isset($_POST['notificationCode']) && trim($_POST['notificationCode']) !== ""  ? trim($_POST['notificationCode']) : null);
       		$type = (isset($_POST['notificationType']) && trim($_POST['notificationType']) !== ""  ? trim($_POST['notificationType']) : null);
-      		 
+			
+			if ($this->debug=='yes') $this->log->add( 'pagseguro', "Verificando tipo de retorno do PagSeguro...");
+			
       		if ( $code && $type ) {
-      				
+				
+				if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno possui POST. Validando...");
+				
       			$notificationType = new PagSeguroNotificationType($type);
       			$strType = $notificationType->getTypeFromValue();
       				
-      			switch($strType) {
-      		
+      			switch(strtoupper($strType)) {
+					
       				case 'TRANSACTION':      					
+						if ($this->debug=='yes') $this->log->add( 'pagseguro', "POST to tipo TRANSACTION detectado. Processando...");
           				$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
 						
 				    	try {
-				    		$transaction = PagSeguroNotificationService::checkTransaction($credentials, $notificationCode);
+				    		$transaction = PagSeguroNotificationService::checkTransaction($credentials, $code);
 				    	} catch (PagSeguroServiceException $e) {
-				    		die($e->getMessage());
+				    		if ($this->debug=='yes') $this->log->add( 'pagseguro', "Erro: ". $e->getMessage());
+							//die($e->getMessage());
 				    	}
           				
 				    	do_action("valid-pagseguro-standard-ipn-request", $transaction);
@@ -295,15 +301,17 @@ function gateway_pagseguro(){
 				    	break;
       		
       				default:
-      					LogPagSeguro::error("Unknown notification type [".$notificationType->getValue()."]");
+      					//LogPagSeguro::error("Unknown notification type [".$notificationType->getValue()."]");
+						if ($this->debug=='yes') $this->log->add( 'pagseguro', "Unknown notification type [".$notificationType->getValue()."]");
       						
       			}
       		
       			//self::printLog($strType);
       				
       		} else {
-      				
-      			LogPagSeguro::error("Invalid notification parameters.");
+      			
+				if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno não possui POST, é somente o retorno da página de pagamento.");				
+      			//LogPagSeguro::error("Invalid notification parameters.");
       			//self::printLog();
       				
       		}      		
