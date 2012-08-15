@@ -72,7 +72,7 @@ function gateway_pagseguro(){
       global $woocommerce;
       
       $this->id      = 'pagseguro';
-      $this->icon     = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro-0.1/pagseguro.png'));
+      $this->icon     = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
       $this->has_fields   = false;
       $this->devurlchk  = 'http://localhost:9090/checkout/checkout.jhtml';
       $this->devurlnpi  = 'http://localhost:9090/pagseguro-ws/checkout/NPI.jhtml';
@@ -147,13 +147,13 @@ function gateway_pagseguro(){
           'title' => __( 'PagSeguro sandbox', 'woothemes' ), 
           'type' => 'checkbox', 
           'label' => __( 'Enable PagSeguro sandbox', 'woothemes' ), 
-          'default' => 'yes'
+          'default' => 'no'
         ),
         'debug' => array(
           'title' => __( 'Debug', 'woothemes' ), 
           'type' => 'checkbox', 
           'label' => __( 'Enable logging (<code>woocommerce/logs/pagseguro.txt</code>)', 'woothemes' ), 
-          'default' => 'yes'
+          'default' => 'no'
         )
       );
     } // End init_form_fields()
