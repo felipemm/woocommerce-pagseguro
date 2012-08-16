@@ -35,7 +35,8 @@ function gateway_pagseguro(){
       		global $woocommerce;
       
       		$this->id         = 'pagseguro';
-      		$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
+      		//$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
+			$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugin_dir_url(__FILE__).'pagseguro.png');
       		$this->has_fields = false;
   
       		// Load the form fields.
