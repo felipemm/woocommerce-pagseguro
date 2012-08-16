@@ -50,7 +50,6 @@ function gateway_pagseguro(){
       		$this->email       = $this->settings['email'];
       		$this->tokenid     = $this->settings['tokenid'];
       		$this->debug       = $this->settings['debug'];  
-      		$this->testmode    = $this->settings['testmode'];    
       
       		// Logs
       		if ($this->debug=='yes') $this->log = $woocommerce->logger();
@@ -112,12 +111,6 @@ function gateway_pagseguro(){
 						'title' => __( 'Token', 'woothemes' ),
 						'type' => 'text',
 						'description' => __( 'Token gerado pelo PagSeguro para pagamento via API', 'woothemes' )
-					),
-					'testmode' => array(
-						'title' => __( 'PagSeguro sandbox', 'woothemes' ), 
-						'type' => 'checkbox', 
-						'label' => __( 'Use somente para testes. Aposta para um servidor localhost onde pode ser feito testes.', 'woothemes' ), 
-						'default' => 'no'
 					),
 					'debug' => array(
 						'title' => __( 'Debug', 'woothemes' ), 
