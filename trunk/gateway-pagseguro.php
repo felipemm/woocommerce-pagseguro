@@ -191,6 +191,20 @@ function gateway_pagseguro(){
           			}
         		}
       		}
+			
+			$endereco = explode(',',$order->billing_address_1);
+			
+			$paymentRequest->setShippingAddress(  
+				$order->billing_postcode,   
+				$endereco[0],       //logradouro
+				$endereco[1],       //numero da casa
+				$order->billing_address_2,       
+				'',       
+				$order->billing_city,       
+				$order->billing_state,       
+				$order->billing_country    
+			);
+
       		
       		$paymentRequest->setExtraAmount(number_format($order->get_total_discount(),2,".","")*-1);
       		$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
