@@ -192,12 +192,14 @@ function gateway_pagseguro(){
         		}
       		}
 			
+			$CODIGO_PAC = PagSeguroShippingType::getCodeByType('PAC'); // 1  
+			$paymentRequest->setShippingType($CODIGO_PAC); 
+
 			$endereco = explode(',',$order->billing_address_1);
-			
 			$paymentRequest->setShippingAddress(  
 				$order->billing_postcode,   
 				$endereco[0],       //logradouro
-				$endereco[1],       //numero da casa
+				(trim($endereco[1]) == "" ? $order->billing_address_2 : trim($endereco[1]),       //numero da casa
 				$order->billing_address_2,       
 				'',       
 				$order->billing_city,       
@@ -209,7 +211,9 @@ function gateway_pagseguro(){
       		$paymentRequest->setExtraAmount(number_format($order->get_total_discount(),2,".","")*-1);
       		$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
       		$pagseguro_url = $paymentRequest->register($credentials);
-    
+      		if ($this->debug=='yes') $this->log->add( 'pagseguro', "pagseguro_url ". $pagseguro_url);
+			
+			
       		$woocommerce->add_inline_js('
         		jQuery("body").block({ 
             		message: "<img src=\"'.esc_url( $woocommerce->plugin_url() ).'/assets/images/ajax-loader.gif\" alt=\"Redirecting...\" style=\"float:left; margin-right: 10px;\" />'.__('Obrigado pela compra. Estamos transferindo para o PagSeguro para realizar o pagamento.', 'woothemes').'", 
@@ -227,9 +231,9 @@ function gateway_pagseguro(){
 	              			lineHeight:    "32px"
 	            		} 
 	          		});
-        			jQuery("#submit_pagseguro_payment_form").click();
-      			');
-      
+				jQuery("#submit_pagseguro_payment_form").click();
+			');
+			
     
       
       		$payment_form = '<form action="'.esc_url( $pagseguro_url ).'" method="post" id="paypal_payment_form">
@@ -282,7 +286,7 @@ function gateway_pagseguro(){
       		$code = (isset($_POST['notificationCode']) && trim($_POST['notificationCode']) !== ""  ? trim($_POST['notificationCode']) : null);
       		$type = (isset($_POST['notificationType']) && trim($_POST['notificationType']) !== ""  ? trim($_POST['notificationType']) : null);
 			
-			if ($this->debug=='yes') $this->log->add( 'pagseguro', "Verificando tipo de retorno do PagSeguro...");
+			//if ($this->debug=='yes') $this->log->add( 'pagseguro', "Verificando tipo de retorno do PagSeguro...");
 			
       		if ( $code && $type ) {
 				
@@ -318,7 +322,7 @@ function gateway_pagseguro(){
       				
       		} else {
       			
-				if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno não possui POST, é somente o retorno da página de pagamento.");				
+				//if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno não possui POST, é somente o retorno da página de pagamento.");				
       			//LogPagSeguro::error("Invalid notification parameters.");
       			//self::printLog();
       				
