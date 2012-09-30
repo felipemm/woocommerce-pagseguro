@@ -199,7 +199,7 @@ function gateway_pagseguro(){
 			$paymentRequest->setShippingAddress(  
 				$order->billing_postcode,   
 				$endereco[0],       //logradouro
-				(trim($endereco[1]) == "" ? $order->billing_address_2 : trim($endereco[1]),       //numero da casa
+				(trim($endereco[1]) == "" ? $order->billing_address_2 : trim($endereco[1])),       //numero da casa
 				$order->billing_address_2,       
 				'',       
 				$order->billing_city,       
