@@ -204,10 +204,10 @@ function gateway_pagseguro(){
 			$endereco = explode(', ',$order->billing_address_1);
 			$paymentRequest->setShippingAddress(
 				$order->billing_postcode,
-				$endereco[0],              //logradouro
-				$endereco[1],              //numero da casa
-				$order->billing_address_2, //complemento
-				utf8_decode($endereco[2]),              //bairro
+				$order->billing_address_1,                              //logradouro
+				get_post_meta($order->id, '_billing_number', true),     //numero da casa
+				$order->billing_address_2,                              //complemento
+				get_post_meta($order->id, '_billing_district', true),   //bairro
 				$order->billing_city,
 				$order->billing_state,
 				$order->billing_country
