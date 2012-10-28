@@ -171,7 +171,7 @@ function gateway_pagseguro(){
 			//telefone sempre estará no formato (99)9999-9999 ou (99)99999-9999
 			$telefone_ddd = substr($order->billing_phone,1,2); //retrieve ddd from parenthesis
 			$telefone = str_replace('-', '', substr($order->billing_phone,4)); //retrieve the rest of the telephone without the '-'
-			$nome_completo = $order->billing_first_name . " " . $order->billing_last_name;
+			$nome_completo = utf8_decode($order->billing_first_name . " " . $order->billing_last_name);
 
 			$paymentRequest->setSender($nome_completo, $order->billing_email, $telefone_ddd, $telefone);
 
@@ -192,7 +192,7 @@ function gateway_pagseguro(){
               			if ($item_loop == 1)
               				$shipping = $order->get_shipping();
 
-              			$paymentRequest->addItem($product->get_sku(), $item_name, $item['qty'], number_format($order->get_item_total( $item, false ), 2, ".", ""), 0, $shipping);
+              			$paymentRequest->addItem($product->get_sku(), utf8_decode($item_name), $item['qty'], number_format($order->get_item_total( $item, false ), 2, ".", ""), 0, $shipping);
           			}
         		}
       		}
