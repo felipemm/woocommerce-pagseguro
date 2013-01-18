@@ -3,7 +3,7 @@
 Plugin Name: WooCommerce PagSeguro
 Plugin URI: http://wooplugins.com.br/loja/pagseguro-gateway/
 Description: Adiciona o gateway de pagamento do PagSeguro no WooCommerce
-Version: 1.9
+Version: 2.0
 Author: Felipe Matos <chucky_ath@yahoo.com.br>
 Author URI: http://felipematos.com
 License: Commercial
