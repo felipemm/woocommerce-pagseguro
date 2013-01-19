@@ -35,8 +35,8 @@ function pagseguro_prevent_update_check( $r, $url ) {
 //	if (empty($checked_data->checked))
 //		return $checked_data; 
 // lines will need to be commented in the check_for_plugin_update function as well.
-get_site_transient( 'update_plugins' ); // unset the plugin
-set_site_transient( 'update_plugins', '' ); // reset plugin database information
+//get_site_transient( 'update_plugins' ); // unset the plugin
+//set_site_transient( 'update_plugins', null ); // reset plugin database information
 // TEMP: Show which variables are being requested when query plugin API
 //add_filter('plugins_api_result', 'pagseguro_result', 10, 3);
 //function pagseguro_result($res, $action, $args) {
