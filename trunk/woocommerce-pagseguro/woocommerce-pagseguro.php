@@ -356,7 +356,8 @@ function gateway_pagseguro(){
       		$paymentRequest = new PagSeguroPaymentRequest();
       		$paymentRequest->setCurrency("BRL");
       		$paymentRequest->setReference($order->id);
-			$paymentRequest->setRedirectUrl(urlencode(htmlspecialchars($this->get_return_url($order))));
+			//$paymentRequest->setRedirectUrl(urlencode(htmlspecialchars($this->get_return_url($order))));
+			$paymentRequest->setRedirectUrl($this->get_return_url($order));
 			//workaround to get tested in localhost
       		if (in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1', '::1'))) {
 				$paymentRequest->setRedirectUrl(htmlspecialchars('http://wooplugins.com.br/'));
