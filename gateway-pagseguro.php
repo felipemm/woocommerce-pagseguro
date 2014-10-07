@@ -3,436 +3,416 @@
 Plugin Name: WooCommerce PagSeguro
 Plugin URI: http://felipematos.com/loja
 Description: Adiciona o gateway de pagamento do PagSeguro no WooCommerce
-Version: 1.1
+Version: 1.2
 Author: Felipe Matos <chucky_ath@yahoo.com.br>
 Author URI: http://felipematos.com
+License: Commercial
 Requires at least: 3.3
-Tested up to: 3.3.4
+Tested up to: 3.4.1
 */
 
 //hook to include the payment gateway function
 add_action('plugins_loaded', 'gateway_pagseguro', 0);
 
+
 //hook function
 function gateway_pagseguro(){
   
-  //classe de verificação do retorno de pagamento
-  class PagSeguroNpi {
-    
-    private $timeout = 20; // Timeout em segundos
-    private $tokenid = ''; //Token do pagseguro
-    private $npi_url = ''; //Url do NPI do PagSeguro
-    
-    public function setTokenID($token){
-      $this->tokenid = $token;
-    }
-    
-    public function setNpiUrl($url){
-      $this->npi_url = $url;
-    }
 
-    public function notificationPost() {
-      $postdata = 'Comando=validar&Token='.$this->tokenid;
-      foreach ($_POST as $key => $value) {
-        $valued    = $this->clearStr($value);
-        $postdata .= "&$key=$valued";
-      }
-      return $this->verify($postdata);
-    }
-    
-    private function clearStr($str) {
-      if (!get_magic_quotes_gpc()) {
-        $str = addslashes($str);
-      }
-      return $str;
-    }
-    
-    private function verify($data) {
-      $curl = curl_init();
-      curl_setopt($curl, CURLOPT_URL, $this->npi_url);
-      curl_setopt($curl, CURLOPT_POST, true);
-      curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
-      curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-      curl_setopt($curl, CURLOPT_HEADER, false);
-      curl_setopt($curl, CURLOPT_TIMEOUT, $this->timeout);
-      curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-      $result = trim(curl_exec($curl));
-      curl_close($curl);
-      return $result;
-    }
+	require_once "PagSeguroLibrary/PagSeguroLibrary.php";
+	
+	//---------------------------------------------------------------------------------------------------
+	//Classe: woocommerce_pagseguro
+  	//Descrição: classe de implementação do gateway PagSeguro
+  	//---------------------------------------------------------------------------------------------------
+  	class woocommerce_pagseguro extends woocommerce_payment_gateway {
 
-  }
-
-
-  //PagSeguro payment gateway class
-  class woocommerce_pagseguro extends woocommerce_payment_gateway {
-
-    public function __construct() { 
-      global $woocommerce;
+  		//---------------------------------------------------------------------------------------------------
+  		//Função: __construct
+  		//Descrição: cria e inicializa o objeto da classe
+  		//---------------------------------------------------------------------------------------------------
+  		public function __construct() { 
+      		global $woocommerce;
       
-      $this->id      = 'pagseguro';
-      $this->icon     = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
-      $this->has_fields   = false;
-      $this->devurlchk  = 'http://localhost:9090/checkout/checkout.jhtml';
-      $this->devurlnpi  = 'http://localhost:9090/pagseguro-ws/checkout/NPI.jhtml';
-      $this->prdurlnpi  = 'https://pagseguro.uol.com.br/pagseguro-ws/checkout/NPI.jhtml';
-      $this->prdurlchk  = 'https://pagseguro.uol.com.br/security/webpagamentos/webpagto.aspx';
+      		$this->id         = 'pagseguro';
+      		//$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
+			$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugin_dir_url(__FILE__).'pagseguro.png');
+      		$this->has_fields = false;
+  
+      		// Load the form fields.
+      		$this->init_form_fields();
       
-      // Load the form fields.
-      $this->init_form_fields();
+      		// Load the settings.
+      		$this->init_settings();
       
-      // Load the settings.
-      $this->init_settings();
+      		// Define user set variables
+      		$this->title       = $this->settings['title'];
+      		$this->description = $this->settings['description'];
+      		$this->email       = $this->settings['email'];
+      		$this->tokenid     = $this->settings['tokenid'];
+      		$this->debug       = $this->settings['debug'];  
       
-      // Define user set variables
-      $this->title = $this->settings['title'];
-      $this->description = $this->settings['description'];
-      $this->email = $this->settings['email'];
-      $this->tokenid = $this->settings['tokenid'];
-      $this->debug = $this->settings['debug'];  
-      $this->testmode  = $this->settings['testmode'];    
+      		// Logs
+      		if ($this->debug=='yes') $this->log = $woocommerce->logger();
       
-      // Logs
-      if ($this->debug=='yes') $this->log = $woocommerce->logger();
-      
-      // Actions
-      add_action( 'init', array(&$this, 'check_ipn_response') );
-      add_action('valid-pagseguro-standard-ipn-request', array(&$this, 'successful_request') );
-      //add_action('woocommerce_thankyou_pagseguro', array(&$this, 'thankyou_page'));
-      add_action('woocommerce_receipt_pagseguro', array(&$this, 'receipt_page'));
-      add_action('woocommerce_update_options_payment_gateways', array(&$this, 'process_admin_options'));
-      
-      if ( !$this->is_valid_for_use() ) $this->enabled = false;
-    } 
+      		// Actions
+      		add_action('init', array(&$this, 'check_ipn_response') );
+      		add_action('valid-pagseguro-standard-ipn-request', array(&$this, 'successful_request') );
+      		add_action('woocommerce_receipt_pagseguro', array(&$this, 'receipt_page'));
+      		add_action('woocommerce_update_options_payment_gateways', array(&$this, 'process_admin_options'));
+      		
+      		if ( !$this->is_valid_for_use() ) $this->enabled = false;
+  		} //Fim da função __construct
+  		
+  		
+  		
+  		//---------------------------------------------------------------------------------------------------
+  		//Função: is_valid_for_use
+  		//Descrição: checa se o gateway está habilitado a disponível para o país do usuário
+  		//---------------------------------------------------------------------------------------------------
+  		function is_valid_for_use() {
+      		if (!in_array(get_option('woocommerce_currency'), array('AUD', 'BRL', 'CAD', 'MXN', 'NZD', 'HKD', 'SGD', 'USD', 'EUR', 'JPY', 'TRY', 'NOK', 'CZK', 'DKK', 'HUF', 'ILS', 'MYR', 'PHP', 'PLN', 'SEK', 'CHF', 'TWD', 'THB', 'GBP'))) 
+      			return false;
+      		return true;
+  		} //Fim da função is_valid_for_use
+  		
+  		
+  		
+  		//---------------------------------------------------------------------------------------------------
+  		//Função: init_form_fields
+  		//Descrição: função do woocommerce que inicializa as variáveis a serem exibidas no painel de
+  		//           configuração do woocommerce.
+  		//---------------------------------------------------------------------------------------------------
+  		function init_form_fields() {
+  			$this->form_fields = array(
+  					'enabled' => array(
+  						'title' => __( 'Habilita/Desabilita', 'woothemes' ),
+  						'type' => 'checkbox',
+  						'label' => __( 'Habilita o PagSeguro', 'woothemes' ),
+  						'default' => 'yes'
+  					),
+					'title' => array(
+						'title' => __( 'Título', 'woothemes' ),
+						'type' => 'text',
+						'description' => __( 'Título que será exibido da forma de pagamento durante o checkout.', 'woothemes' ),
+						'default' => __( 'Pague com PagSeguro', 'woothemes' )
+					),
+					'description' => array(
+						'title' => __( 'Mensagem', 'woothemes' ),
+						'type' => 'textarea',
+						'description' => __( 'Exibe uma mensagem de texto ao selecionar o meio de pagamento (opcional).', 'woothemes' ),
+						'default' => ''
+					),
+					'email' => array(
+						'title' => __( 'E-Mail', 'woothemes' ),
+						'type' => 'text',
+						'description' => __( 'e-Mail da conta do PagSeguro que receberá os pagamentos.', 'woothemes' )
+					),
+					'tokenid' => array(
+						'title' => __( 'Token', 'woothemes' ),
+						'type' => 'text',
+						'description' => __( 'Token gerado pelo PagSeguro para pagamento via API', 'woothemes' )
+					),
+					'debug' => array(
+						'title' => __( 'Debug', 'woothemes' ), 
+						'type' => 'checkbox', 
+						'label' => __( 'Habilita a escrita de log (<code>woocommerce/logs/pagseguro.txt</code>)', 'woothemes' ), 
+						'default' => 'no'
+					)
+			);
+  		} //Fim da função init_form_fields
     
-     //Check if this gateway is enabled and available in the user's country
-    function is_valid_for_use() {
-      if (!in_array(get_option('woocommerce_currency'), array('AUD', 'BRL', 'CAD', 'MXN', 'NZD', 'HKD', 'SGD', 'USD', 'EUR', 'JPY', 'TRY', 'NOK', 'CZK', 'DKK', 'HUF', 'ILS', 'MYR', 'PHP', 'PLN', 'SEK', 'CHF', 'TWD', 'THB', 'GBP'))) return false;
-      return true;
-    }
+    
+    
+  		//---------------------------------------------------------------------------------------------------
+  		//Função: admin_options
+  		//Descrição: gera o formulário a ser exibido no painel deconfiguração
+  		//---------------------------------------------------------------------------------------------------
+  		public function admin_options() {
+  			?>
+	      		<h3><?php _e('PagSeguro', 'woothemes'); ?></h3>
+	      		<p><?php _e('Opção para pagamento através do PagSeguro', 'woothemes'); ?></p>
+	      		<table class="form-table">
+	      		<?php
+	        		// Generate the HTML For the settings form.
+	        		$this->generate_settings_html();
+	      		?>
+	      		</table><!--/.form-table-->
+      		<?php
+    	} //Fim da função admin_options
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: payment_fields
+  		//Descrição: Exibe a Mensagem ao selecionar a forma de pagamento se ela estiver definida
+  		//---------------------------------------------------------------------------------------------------
+  		function payment_fields() {
+      		if ($this->description) 
+      			echo wpautop(wptexturize($this->description));
+    	} //Fim da função payment_fields
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: generate_pagseguro_form
+  		//Descrição: gera o formulário de pagamento e envia os dados para o PagSeguro
+  		//---------------------------------------------------------------------------------------------------
+    	function generate_pagseguro_form($order_id){
+      		global $woocommerce;
+      		$order = &new woocommerce_order( $order_id );
+      
+      		//Cria um objeto de requisição de pagamento e popula os dados
+      		$paymentRequest = new PagSeguroPaymentRequest();
+      		$paymentRequest->setCurrency("BRL");
+      		$paymentRequest->setReference($order->id);
+      		$paymentRequest->setSender($order->billing_first_name . " " . $order->billing_last_name, $order->billing_email, substr($order->billing_phone,0,2), substr($order->billing_phone,2,10));
+      		$paymentRequest->setRedirectUrl($this->get_return_url($order));
+      		
 
-    //Initialise Gateway Settings Form Fields
-    function init_form_fields() {
-      $this->form_fields = array(
-        'enabled' => array(
-          'title' => __( 'Enable/Disable', 'woothemes' ),
-          'type' => 'checkbox',
-          'label' => __( 'Enable Cheque Payment', 'woothemes' ),
-          'default' => 'yes'
-        ),
-        'title' => array(
-          'title' => __( 'Title', 'woothemes' ),
-          'type' => 'text',
-          'description' => __( 'This controls the title which the user sees during checkout.', 'woothemes' ),
-          'default' => __( 'Pague com PagSeguro', 'woothemes' )
-        ),
-        'description' => array(
-          'title' => __( 'Customer Message', 'woothemes' ),
-          'type' => 'textarea',
-          'description' => __( 'Let the customer know the payee and where they should be sending the cheque to and that their order won\'t be shipping until you receive it.', 'woothemes' ),
-          'default' => 'O PagSeguro é o meio de pagamento mais completo e eficiente na proteção contra fraudes em compras online.'
-        ),
-        'email' => array(
-          'title' => __( 'E-Mail', 'woothemes' ),
-          'type' => 'text',
-          'description' => __( 'E-mail registered into PagSeguro to receive the payments', 'woothemes' )
-        ),
-        'tokenid' => array(
-          'title' => __( 'Token', 'woothemes' ),
-          'type' => 'text',
-          'description' => __( 'Token gerado pelo PagSeguro para pagamento via API', 'woothemes' )
-        ),
-        'testmode' => array(
-          'title' => __( 'PagSeguro sandbox', 'woothemes' ), 
-          'type' => 'checkbox', 
-          'label' => __( 'Enable PagSeguro sandbox', 'woothemes' ), 
-          'default' => 'no'
-        ),
-        'debug' => array(
-          'title' => __( 'Debug', 'woothemes' ), 
-          'type' => 'checkbox', 
-          'label' => __( 'Enable logging (<code>woocommerce/logs/pagseguro.txt</code>)', 'woothemes' ), 
-          'default' => 'no'
-        )
-      );
-    } // End init_form_fields()
+      		$item_loop = 0;
+      		if (sizeof($order->get_items())>0){
+        		foreach ($order->get_items() as $item){
+          			if ($item['qty']){
+            			$item_loop++;
+        				$product = $order->get_product_from_item($item);
+            			$item_name   = $item['name'];
+	            		$item_meta = new order_item_meta( $item['item_meta'] );          
+            			
+            			if ($meta = $item_meta->display( true, true )) :
+              				$item_name .= ' ('.$meta.')';
+              			endif;
+            			
+              			$shipping = 0;
+              			if ($item_loop == 1)
+              				$shipping = $order->get_shipping();
+              			
+              			$paymentRequest->addItem($product->get_sku(), $item_name, $item['qty'], number_format($order->get_item_total( $item, false ), 2, ".", ""), 0, $shipping);
+          			}
+        		}
+      		}
+      		
+      		$paymentRequest->setExtraAmount(number_format($order->get_total_discount(),2,".","")*-1);
+      		$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
+      		$pagseguro_url = $paymentRequest->register($credentials);
     
-    //Admin Panel Options
-    //Options for bits like 'title' and availability on a country-by-country basis
-    public function admin_options() {
-      ?>
-      <h3><?php _e('PagSeguro', 'woothemes'); ?></h3>
-      <p><?php _e('Opção para pagamento através do PagSeguro', 'woothemes'); ?></p>
-      <table class="form-table">
-      <?php
-        // Generate the HTML For the settings form.
-        $this->generate_settings_html();
-      ?>
-      </table><!--/.form-table-->
-      <?php
-    } // End admin_options()
-    
-    // There are no payment fields for paypal, but we want to show the description if set.
-    function payment_fields() {
-      if ($this->description) echo wpautop(wptexturize($this->description));
-    }
-    
-    //generate the form to send to pagseguro
-    function generate_pagseguro_form($order_id){
-      global $woocommerce;
-      $order = &new woocommerce_order( $order_id );
-      
-      if ( $this->testmode == 'yes' ):
-        $pagseguro_url = $this->devurlchk;
-      else :
-        $pagseguro_url = $this->prdurlchk;
-      endif;
-      
-      //create array used to store order data for the payment request
-      $pagseguro_args = array();
-      $pagseguro_args['email_cobranca']  = $this->email;
-      $pagseguro_args['tipo']  = 'CP';
-      $pagseguro_args['moeda']  = "BRL";
-      $pagseguro_args['ref_transacao']  = $order_id;
-      $pagseguro_args['cliente_nome']  = $order->billing_first_name . " " . $order->billing_last_name;
-      $pagseguro_args['cliente_ddd']  = substr($order->billing_phone,0,2);
-      $pagseguro_args['cliente_tel']  = substr($order->billing_phone,2,10);
-      $pagseguro_args['cliente_email']  = $order->billing_email;
-      
-      // Add the items for this payment request
-      //if (sizeof($order->items)>0){
-      //  foreach ($order->items as $item){
-      //    if ($item['qty']){
-      //      $item_loop++;
-      //      
-      //      $pagseguro_args['item_id_'.$item_loop]  = $item['id'];
-      //      $pagseguro_args['item_descr_'.$item_loop]  = $item['name'];
-      //      $pagseguro_args['item_valor_'.$item_loop]  = $item['cost'];
-      //      $pagseguro_args['item_quant_'.$item_loop]  = $item['qty'];
-      //    }
-      //  }
-      //}
-      $item_loop = 0;
-      if (sizeof($order->get_items())>0){
-        foreach ($order->get_items() as $item){
-          if ($item['qty']){
-            $item_loop++;
-            
-            $product = $order->get_product_from_item($item);
-            
-            $item_name   = $item['name'];
-            
-            $item_meta = new order_item_meta( $item['item_meta'] );          
-            if ($meta = $item_meta->display( true, true )) :
-              $item_name .= ' ('.$meta.')';
-              endif;
-            
-            $pagseguro_args['item_id_'.$item_loop]  = $product->get_sku();
-            $pagseguro_args['item_descr_'.$item_loop]  = $item_name;
-            $pagseguro_args['item_valor_'.$item_loop]  = $order->get_item_total( $item, false );
-            $pagseguro_args['item_quant_'.$item_loop]  = $item['qty'];
-          }
-        }
-      }
-      $pagseguro_args['item_frete_1'] = $order->get_shipping();
-	  $pagseguro_args['extras'] = number_format($order->get_total_discount(),2,"","")*-1;
-	  
-	  
-      $pagseguro_args_array = array();
-
-      foreach ($pagseguro_args as $key => $value) {
-        $pagseguro_args_array[] = '<input type="hidden" name="'.esc_attr( $key ).'" value="'.esc_attr( $value ).'" />';
-      }
-      
-    
-      $woocommerce->add_inline_js('
-        jQuery("body").block({ 
-            message: "<img src=\"'.esc_url( $woocommerce->plugin_url() ).'/assets/images/ajax-loader.gif\" alt=\"Redirecting...\" style=\"float:left; margin-right: 10px;\" />'.__('Obrigado pela compra. Estamos transferindo para o PagSeguro para realizar o pagamento.', 'woothemes').'", 
-            overlayCSS: 
-            { 
-              background: "#fff", 
-              opacity: 0.6 
-            },
-            css: { 
-              padding:        20, 
-              textAlign:      "center", 
-              color:          "#555", 
-              border:         "3px solid #aaa", 
-              backgroundColor:"#fff", 
-              cursor:         "wait",
-              lineHeight:    "32px"
-            } 
-          });
-        jQuery("#submit_pagseguro_payment_form").click();
-      ');
+      		$woocommerce->add_inline_js('
+        		jQuery("body").block({ 
+            		message: "<img src=\"'.esc_url( $woocommerce->plugin_url() ).'/assets/images/ajax-loader.gif\" alt=\"Redirecting...\" style=\"float:left; margin-right: 10px;\" />'.__('Obrigado pela compra. Estamos transferindo para o PagSeguro para realizar o pagamento.', 'woothemes').'", 
+	            		overlayCSS: { 
+	              			background: "#fff", 
+	              			opacity: 0.6 
+	            		},
+	            		css: { 
+	              			padding:        20, 
+	              			textAlign:      "center", 
+	              			color:          "#555", 
+	              			border:         "3px solid #aaa", 
+	              			backgroundColor:"#fff", 
+	              			cursor:         "wait",
+	              			lineHeight:    "32px"
+	            		} 
+	          		});
+        			jQuery("#submit_pagseguro_payment_form").click();
+      			');
       
     
       
-      $payment_form = '<form action="'.esc_url( $pagseguro_url ).'" method="post" id="paypal_payment_form">
-              ' . implode('', $pagseguro_args_array) . '
-              <input type="submit" class="button" id="submit_pagseguro_payment_form" value="'.__('Pague com PagSeguro', 'woothemes').'" /> <a class="button cancel" href="'.esc_url( $order->get_cancel_order_url() ).'">'.__('Cancelar pedido', 'woothemes').'</a>
-              </form>';
-          //    ' . $this->get_return_url( $order ) . '
+      		$payment_form = '<form action="'.esc_url( $pagseguro_url ).'" method="post" id="paypal_payment_form">
+              					<input type="submit" class="button" id="submit_pagseguro_payment_form" value="'.__('Pague com PagSeguro', 'woothemes').'" /> 
+  								<a class="button cancel" href="'.esc_url( $order->get_cancel_order_url() ).'">'.__('Cancelar pedido', 'woothemes').'</a>
+              				</form>';
 
-      if ($this->debug=='yes') $this->log->add( 'pagseguro', "Pedido gerado com sucesso. Abaixo código HTML do formulário:");
-      if ($this->debug=='yes') $this->log->add( 'pagseguro', $payment_form);
+      		if ($this->debug=='yes') $this->log->add( 'pagseguro', "Pedido gerado com sucesso. Abaixo código HTML do formulário:");
+      		if ($this->debug=='yes') $this->log->add( 'pagseguro', $payment_form);
       
-      return $payment_form;
-    }
-    
-    // Process the payment and return the result
-    function process_payment( $order_id ) {
+      		return $payment_form;
+    	} //Fim da função generate_pagseguro_form
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: process_payment
+  		//Descrição: processa o pagamento e retorna o resultado
+  		//---------------------------------------------------------------------------------------------------
+    	function process_payment( $order_id ) {
       
-      $order = &new woocommerce_order( $order_id );
+      		$order = &new woocommerce_order( $order_id );
       
-      return array(
-        'result'   => 'success',
-        'redirect'  => add_query_arg('order', $order->id, add_query_arg('key', $order->order_key, get_permalink(get_option('woocommerce_pay_page_id'))))
-      );
-      
-    }    
-    
-    // receipt_page
-    function receipt_page( $order ) {
-      
-      echo '<p>'.__('Thank you for your order, please click the button below to pay with PagSeguro.', 'woothemes').'</p>';
-      
-      echo $this->generate_pagseguro_form( $order );
-    }
-    
-    //thank you page (where user will be redirected from pagseguro
-    //function thankyou_page($order_id) {
-    //  $order = &new woocommerce_order( $order_id );
-    //  if ($this->description) echo wpautop(wptexturize($this->get_return_url( $order )));
-    //  
-    //}
+      		return array(
+        		'result'    => 'success',
+        		'redirect'  => add_query_arg('order', $order->id, add_query_arg('key', $order->order_key, get_permalink(get_option('woocommerce_pay_page_id'))))
+      		);
+    	} //Fim da função process_payment
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: receipt_page
+  		//Descrição: Página final antes de redirecionar para a página de pagamento do PagSeguro
+  		//---------------------------------------------------------------------------------------------------
+    	function receipt_page( $order ) {
+    		echo '<p>'.__('Obrigado pelo seu pedido. Por favor clique no botão "Pagar com PagSeguro" para finalizar o pagamento.', 'woothemes').'</p>';
+    		echo $this->generate_pagseguro_form( $order );
+    	}
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: check_ipn_response
+  		//Descrição: Verifica se o retorno do pagseguro é válido, se for, atualiza o pedido com o novo status
+  		//---------------------------------------------------------------------------------------------------
+    	function check_ipn_response() {
+      		global $woocommerce;
 
-    // Check PagSeguro IPN validity
-    function check_ipn_request_is_valid() {
-      global $woocommerce;
+      		$code = (isset($_POST['notificationCode']) && trim($_POST['notificationCode']) !== ""  ? trim($_POST['notificationCode']) : null);
+      		$type = (isset($_POST['notificationType']) && trim($_POST['notificationType']) !== ""  ? trim($_POST['notificationType']) : null);
+			
+			if ($this->debug=='yes') $this->log->add( 'pagseguro', "Verificando tipo de retorno do PagSeguro...");
+			
+      		if ( $code && $type ) {
+				
+				if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno possui POST. Validando...");
+				
+      			$notificationType = new PagSeguroNotificationType($type);
+      			$strType = $notificationType->getTypeFromValue();
+      				
+      			switch(strtoupper($strType)) {
+					
+      				case 'TRANSACTION':      					
+						if ($this->debug=='yes') $this->log->add( 'pagseguro', "POST to tipo TRANSACTION detectado. Processando...");
+          				$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
+						
+				    	try {
+				    		$transaction = PagSeguroNotificationService::checkTransaction($credentials, $code);
+				    	} catch (PagSeguroServiceException $e) {
+				    		if ($this->debug=='yes') $this->log->add( 'pagseguro', "Erro: ". $e->getMessage());
+							//die($e->getMessage());
+				    	}
+          				
+				    	do_action("valid-pagseguro-standard-ipn-request", $transaction);
+				    	
+				    	break;
+      		
+      				default:
+      					//LogPagSeguro::error("Unknown notification type [".$notificationType->getValue()."]");
+						if ($this->debug=='yes') $this->log->add( 'pagseguro', "Unknown notification type [".$notificationType->getValue()."]");
+      						
+      			}
+      		
+      			//self::printLog($strType);
+      				
+      		} else {
+      			
+				if ($this->debug=='yes') $this->log->add( 'pagseguro', "Retorno não possui POST, é somente o retorno da página de pagamento.");				
+      			//LogPagSeguro::error("Invalid notification parameters.");
+      			//self::printLog();
+      				
+      		}      		
+    	} //Fim da função check_ipn_response
+    	
+    	
+    	
+    	//---------------------------------------------------------------------------------------------------
+  		//Função: successful_request
+  		//Descrição: Atualiza o pedido com a notificação enviada pelo pagseguro. Se a notificação for de 
+  		//           transação concluída, finaliza o pedido (status = completo para downloads e processing
+  		//           para produtos físicos (o produto já pode ser enviado pela transportadora)
+  		//---------------------------------------------------------------------------------------------------
+    	function successful_request( $transaction ) {
+      		
+    		$reference = $transaction->getReference();
+    		$transactionID = $transaction->getCode();
+    		$status = $transaction->getStatus();
+    		$sender = $transaction->getSender();
+    		$paymentMethod = $transaction->getPaymentMethod();
+    		$code = $paymentMethod->getCode();
+
+    		
+      		if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido = '.$reference.' / Status = '.$status->getTypeFromValue());
       
-      if ( $this->testmode == 'yes' ):
-        $pagseguro_url = $this->devurlnpi;
-      else :
-        $pagseguro_url = $this->prdurlnpi;
-      endif;
-      if ($this->debug=='yes') $this->log->add( 'pagseguro', 'NPI URL: '. $pagseguro_url);
-
-      if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Verificando se a resposta do NPI é válida' );
-
-      if (count($_POST) > 0) {
+      		if (!empty($reference) && !empty($transactionID)) {
         
-        // POST recebido, indica que é a requisição do NPI.
-        if ($this->debug=='yes') $this->log->add( 'pagseguro', 'POST recebido, indica que é a requisição do NPI.');
-        
-        $npi = new PagSeguroNpi();
-        $npi->setTokenID($this->tokenid);
-        $npi->setNpiUrl($pagseguro_url);
-        $result = $npi->notificationPost();
-        
-        $transacaoID = isset($_POST['TransacaoID']) ? $_POST['TransacaoID'] : '';
+        		$order = new woocommerce_order( (int) $reference );
 
-        if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Número da Transação = '. $transacaoID);
-        
-        if ($result == "VERIFICADO") {
-          if ($this->debug=='yes') $this->log->add( 'pagseguro', 'POST Validado pelo PagSeguro');
-          return true;
-          //O post foi validado pelo PagSeguro.
-        } else if ($result == "FALSO") {
-          //O post não foi validado pelo PagSeguro.
-        } else {
-          //Erro na integração com o PagSeguro.
-        }
-        
-      } else {
-        // POST não recebido, indica que a requisição é o retorno do Checkout PagSeguro.
-        // No término do checkout o usuário é redirecionado para este bloco.
-      }
-
-    }
-    
-    // Check for PayPal IPN Response
-    function check_ipn_response() {
-        
-      if ( !empty($_POST['Referencia']) && !empty($_POST['TransacaoID']) ) {
-      
-        $_POST = stripslashes_deep($_POST);
-        
-        if ($this->check_ipn_request_is_valid()){
-        
-          if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Analisando Reposta');
-          do_action("valid-pagseguro-standard-ipn-request", $_POST);
-
-        }
-        
-      }
-        
-    }
-        
-    // Successful Payment!
-    function successful_request( $posted ) {
-      
-      if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido = '.$posted['Referencia'].' / Status = '.$posted['StatusTransacao']);
-      // Custom holds post ID
-      if ( !empty($posted['Referencia']) && !empty($posted['TransacaoID']) ) {
-        
-        $order = new woocommerce_order( (int) $posted['Referencia'] );
-
-        // Check order not already completed
-        if ($order->status == 'completed') {
-          if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].' já se encontra completado no sistema!');
-          exit;
-        }
-
-        // We are here so lets check status and do actions
-        switch (strtolower($posted['StatusTransacao'])){
-          case 'aprovado':
-            // Check valid txn_type
-            //$accepted_types = array('cart', 'instant', 'express_checkout', 'web_accept', 'masspay', 'send_money');
-            //if (!in_array(strtolower($posted['txn_type']), $accepted_types)) exit;
-            
-            // Payment completed
-            $order->add_order_note( __('Pagamento aprovado pelo PagSeguro. Aguardando compensação', 'woothemes') );
-            $order->payment_complete();
-            
-            // Store PP Details
-            update_post_meta( (int) $posted['Referencia'], 'Nome', $posted['CliNome']);
-            update_post_meta( (int) $posted['Referencia'], 'E-Mail PagSeguro', $posted['CliEmail']);
-            update_post_meta( (int) $posted['Referencia'], 'Código Transação', $posted['TransacaoID']);
-            update_post_meta( (int) $posted['Referencia'], 'Método Pagamento', $posted['TipoPagamento']);
-            update_post_meta( (int) $posted['Referencia'], 'Data Transação', $posted['DataTransacao']); 
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento confirmado e pedido atualizado');
-            
-            break;
-          case 'aguardando pagto':
-            $order->update_status('on-hold','Aguardando confirmação de pagamento do PagSeguro');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Aguardando confirmação de pagamento do PagSeguro');
-            break;
-          case 'completo':
-            $order->add_order_note( __('Pagamento pelo PagSeguro compensado e transação finalizada.', 'woothemes') );
-            //$order->update_status('processing','Pagamento aprovado pelo PagSeguro. Aguardando compensação.');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento pelo PagSeguro compensado e transação finalizada.');
-            break;
-          case utf8_decode('em análise'):
-            $order->update_status('processing','Pagamento aprovado pelo PagSeguro. Aguardando análise.');
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento aprovado pelo PagSeguro. Aguardando análise.');
-            break;
-          case 'cancelado':
-            $order->update_status('failed', sprintf(__('Pagamento %s foi recusado pelo Pagseguro.', 'woothemes'), strtolower($posted['StatusTransacao']) ) );
-            if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$posted['Referencia'].': Pagamento recusado pelo PagSeguro');
-            break;
-          default:
-            // No action
-            break;
-        }
-      }
-    }
-  }
-
-  //Add the gateway to WooCommerce
-  function add_pagseguro_gateway( $methods ) {
-    $methods[] = 'woocommerce_pagseguro'; return $methods;
-  }
-
-  add_filter('woocommerce_payment_gateways', 'add_pagseguro_gateway' );
+        		//Check order not already completed
+        		if ($order->status == 'completed') {
+          			if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$reference.' já se encontra completado no sistema!');
+          			exit;
+        		}
+        		
+        		
+        		// We are here so lets check status and do actions
+        		switch ($status->getValue()){
+          			
+					case 1: //WAITING_PAYMENT
+          				$order->add_order_note( __('O comprador iniciou a transação, mas até o momento o PagSeguro não recebeu nenhuma informação sobre o pagamento.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': O comprador iniciou a transação, mas até o momento o PagSeguro não recebeu nenhuma informação sobre o pagamento.');
+          				break;
+          				
+          				
+          			case 2: //IN_ANALYSIS
+          				$order->update_status('on-hold', __('O comprador optou por pagar com um cartão de crédito e o PagSeguro está analisando o risco da transação.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': O comprador optou por pagar com um cartão de crédito e o PagSeguro está analisando o risco da transação.');
+          				break;
+          				
+          				
+          			case 3: //PAID
+          				$order->add_order_note( __('A transação foi paga pelo comprador e o PagSeguro já recebeu uma confirmação da instituição financeira responsável pelo processamento.', 'woothemes') );
+          				$order->payment_complete();
+          				
+          				update_post_meta($order->id, 'Nome do cliente' , $sender->getName());
+          				update_post_meta($order->id, 'E-Mail PagSeguro', $sender->getEmail());
+          				update_post_meta($order->id, 'Código Transação', $transacao->getCode());
+          				update_post_meta($order->id, 'Método Pagamento', $code->getTypeFromValue());
+          				update_post_meta($order->id, 'Data Transação'  , $transacao->getLastEventDate());
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': A transação foi paga pelo comprador e o PagSeguro já recebeu uma confirmação da instituição financeira responsável pelo processamento.');
+          				
+          				break;
+          				
+          				
+          			case 4: //AVAILABLE
+            			$order->add_order_note( __('A transação foi paga e chegou ao final de seu prazo de liberação sem ter sido retornada e sem que haja nenhuma disputa aberta.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': A transação foi paga e chegou ao final de seu prazo de liberação sem ter sido retornada e sem que haja nenhuma disputa aberta.');
+          				break;
+          				
+          				
+          			case 5: //IN_DISPUTE
+            			$order->add_order_note( __('O comprador, dentro do prazo de liberação da transação, abriu uma disputa.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': O comprador, dentro do prazo de liberação da transação, abriu uma disputa.');
+          				break;
+          				
+          				
+          			case 6: //REFUNDED
+          				$order->update_status('failed', __('O valor da transação foi devolvido para o comprador.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': O valor da transação foi devolvido para o comprador.');
+          				break;
+          				
+          				
+          			case 7: //CANCELLED
+          				$order->update_status('cancelled', __('A transação foi cancelada sem ter sido finalizada.', 'woothemes') );
+          				if ($this->debug=='yes') $this->log->add( 'pagseguro', 'Pedido '.$order->id.': A transação foi cancelada sem ter sido finalizada.');          				
+          				break;
+          			
+          				
+          			default:
+          				break;
+          				
+        		}
+      		}
+    	} //Fim da função successful_request
+  	} //Fim da classe woocommerce_pagseguro
+  	
+  	
+  	
+  	//Add the gateway to WooCommerce
+  	function add_pagseguro_gateway( $methods ) {
+  		$methods[] = 'woocommerce_pagseguro'; 
+  		return $methods;
+  	}
+  	
+  	
+  	
+  	add_filter('woocommerce_payment_gateways', 'add_pagseguro_gateway' );
 }
+?>
