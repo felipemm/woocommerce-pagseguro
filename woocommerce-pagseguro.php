@@ -1,15 +1,144 @@
 <?php
 /*
 Plugin Name: WooCommerce PagSeguro
-Plugin URI: http://felipematos.com/loja
+Plugin URI: http://wooplugins.com.br/loja/pagseguro-gateway/
 Description: Adiciona o gateway de pagamento do PagSeguro no WooCommerce
-Version: 1.3
+Version: 2.0
 Author: Felipe Matos <chucky_ath@yahoo.com.br>
 Author URI: http://felipematos.com
 License: Commercial
-Requires at least: 3.3
-Tested up to: 3.4.1
+Requires at least: 3.4
+Tested up to: 3.5
 */
+
+
+//-------------------------------------------------------------------------------------------
+// ##### PLUGIN AUTO UPDATE CODE #####
+//-------------------------------------------------------------------------------------------
+
+//Making sure wordpress does not check this plugin into their repository
+add_filter( 'http_request_args', 'pagseguro_prevent_update_check', 10, 2 );
+function pagseguro_prevent_update_check( $r, $url ) {
+    if ( 0 === strpos( $url, 'http://api.wordpress.org/plugins/update-check/' ) ) {
+        $my_plugin = plugin_basename( __FILE__ );
+        $plugins = unserialize( $r['body']['plugins'] );
+        unset( $plugins->plugins[$my_plugin] );
+        unset( $plugins->active[array_search( $my_plugin, $plugins->active )] );
+        $r['body']['plugins'] = serialize( $plugins );
+    }
+    return $r;
+}
+
+
+// TEMP: Enable update check on every request. Normally you don't need this! This is for testing only!
+// NOTE: The 
+//	if (empty($checked_data->checked))
+//		return $checked_data; 
+// lines will need to be commented in the check_for_plugin_update function as well.
+//get_site_transient( 'update_plugins' ); // unset the plugin
+//set_site_transient( 'update_plugins', null ); // reset plugin database information
+// TEMP: Show which variables are being requested when query plugin API
+//add_filter('plugins_api_result', 'pagseguro_result', 10, 3);
+//function pagseguro_result($res, $action, $args) {
+//	print_r($res);
+//	return $res;
+//}
+// NOTE: All variables and functions will need to be prefixed properly to allow multiple plugins to be updated
+
+$api_url = 'http://update.wooplugins.com.br';
+$plugin_slug = basename(dirname(__FILE__));
+
+// Take over the update check
+add_filter('pre_set_site_transient_update_plugins', 'pagseguro_check_for_plugin_update');
+
+function pagseguro_check_for_plugin_update($checked_data) {
+	global $api_url, $plugin_slug;
+	
+	//Comment out these two lines during testing.
+	if (empty($checked_data->checked))
+		return $checked_data;
+	
+	$args = array(
+		'slug' => $plugin_slug,
+		'version' => $checked_data->checked[$plugin_slug .'/'. $plugin_slug .'.php'],
+	);
+	$request_string = array(
+			'body' => array(
+				'action' => 'basic_check', 
+				'request' => serialize($args),
+				'api-key' => md5(get_bloginfo('url'))
+			),
+			'user-agent' => 'WordPress/' . $wp_version . '; ' . get_bloginfo('url')
+		);
+	
+	// Start checking for an update
+	$raw_response = wp_remote_post($api_url, $request_string);
+	
+	if (!is_wp_error($raw_response) && ($raw_response['response']['code'] == 200))
+		$response = unserialize($raw_response['body']);
+	
+	if (is_object($response) && !empty($response)) // Feed the update data into WP updater
+		$checked_data->response[$plugin_slug .'/'. $plugin_slug .'.php'] = $response;
+	
+	return $checked_data;
+}
+
+
+// Take over the Plugin info screen
+add_filter('plugins_api', 'pagseguro_plugin_api_call', 10, 3);
+
+function pagseguro_plugin_api_call($def, $action, $args) {
+	global $plugin_slug, $api_url;
+	
+	if ($args->slug != $plugin_slug)
+		return false;
+	
+	// Get the current version
+	$plugin_info = get_site_transient('update_plugins');
+	$current_version = $plugin_info->checked[$plugin_slug .'/'. $plugin_slug .'.php'];
+	$args->version = $current_version;
+	
+	$request_string = array(
+			'body' => array(
+				'action' => $action, 
+				'request' => serialize($args),
+				'api-key' => md5(get_bloginfo('url'))
+			),
+			'user-agent' => 'WordPress/' . $wp_version . '; ' . get_bloginfo('url')
+		);
+	
+	$request = wp_remote_post($api_url, $request_string);
+	
+	if (is_wp_error($request)) {
+		$res = new WP_Error('plugins_api_failed', __('An Unexpected HTTP Error occurred during the API request.</p> <p><a href="?" onclick="document.location.reload(); return false;">Try again</a>'), $request->get_error_message());
+	} else {
+		$res = unserialize($request['body']);
+		
+		if ($res === false)
+			$res = new WP_Error('plugins_api_failed', __('An unknown error occurred'), $request['body']);
+	}
+	
+	return $res;
+}
+//-------------------------------------------------------------------------------------------
+// ##### PLUGIN AUTO UPDATE CODE #####
+//-------------------------------------------------------------------------------------------
+
+
+
+
+/**
+ * WooCommerce fallback notice.
+ */
+function pagseguro_woocommerce_fallback_notice() {
+    $message = '<div class="error">';
+	$message .= '<p>' . __( 'WooCommerce PagSeguro Gateway depends on the last version of <a href="http://wordpress.org/extend/plugins/woocommerce/">WooCommerce</a> to work!' , 'pagseguro' ) . '</p>';
+    $message .= '</div>';
+
+    echo $message;
+}
+
+
 
 //hook to include the payment gateway function
 add_action('plugins_loaded', 'gateway_pagseguro', 0);
@@ -19,13 +148,20 @@ add_action('plugins_loaded', 'gateway_pagseguro', 0);
 function gateway_pagseguro(){
 
 
+    if ( !class_exists( 'WC_Payment_Gateway' ) || !class_exists( 'WC_Order_Item_Meta' ) ) {
+        add_action( 'admin_notices', 'pagseguro_woocommerce_fallback_notice' );
+
+        return;
+    }
+
+
 	require_once "PagSeguroLibrary/PagSeguroLibrary.php";
 
 	//---------------------------------------------------------------------------------------------------
 	//Classe: woocommerce_pagseguro
   	//Descrição: classe de implementação do gateway PagSeguro
   	//---------------------------------------------------------------------------------------------------
-  	class woocommerce_pagseguro extends woocommerce_payment_gateway {
+  	class woocommerce_pagseguro extends WC_Payment_Gateway {
 
   		//---------------------------------------------------------------------------------------------------
   		//Função: __construct
@@ -34,10 +170,10 @@ function gateway_pagseguro(){
   		public function __construct() {
       		global $woocommerce;
 
-      		$this->id         = 'pagseguro';
-      		//$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugins_url('woocommerce-pagseguro/pagseguro.png'));
-			$this->icon       = apply_filters('woocommerce_pagseguro_icon', $url = plugin_dir_url(__FILE__).'pagseguro.png');
-      		$this->has_fields = false;
+      		$this->id           = 'pagseguro';
+            $this->method_title = __( 'PagSeguro', 'woothemes' );
+			$this->icon         = apply_filters('woocommerce_pagseguro_icon', $url = plugin_dir_url(__FILE__).'pagseguro.png');
+      		$this->has_fields   = false;
 
       		// Load the form fields.
       		$this->init_form_fields();
@@ -50,6 +186,8 @@ function gateway_pagseguro(){
       		$this->description = $this->settings['description'];
       		$this->email       = $this->settings['email'];
       		$this->tokenid     = $this->settings['tokenid'];
+      		$this->usewcfields = $this->settings['usewcfields'];
+            $this->valid_address  = $this->settings['valid_address'];
       		$this->debug       = $this->settings['debug'];
 
       		// Logs
@@ -57,11 +195,33 @@ function gateway_pagseguro(){
 
       		// Actions
       		add_action('init', array(&$this, 'check_ipn_response') );
-      		add_action('valid-pagseguro-standard-ipn-request', array(&$this, 'successful_request') );
-      		add_action('woocommerce_receipt_pagseguro', array(&$this, 'receipt_page'));
+      		add_action('valid-'.$this->id.'-standard-ipn-request', array(&$this, 'successful_request') );
+      		add_action('woocommerce_receipt_'.$this->id, array(&$this, 'receipt_page'));
       		add_action('woocommerce_update_options_payment_gateways', array(&$this, 'process_admin_options'));
 
-      		if ( !$this->is_valid_for_use() ) $this->enabled = false;
+
+            if ( $this->valid_address == 'yes' && !function_exists('custom_override_billing_fields')) {
+                add_action( 'woocommerce_checkout_process', array( &$this, 'valid_address' ) );
+            }
+			
+			//check if woocommerce-fields extension is available, it will force to no even in the admin is yes
+			if (!function_exists('custom_override_billing_fields')) {
+				$this->usewcfields = 'no';
+			}
+			
+            // Valid for use.
+      		//if ( !$this->is_valid_for_use() ) $this->enabled = false;
+            $this->enabled = ( 'yes' == $this->settings['enabled'] ) && !empty( $this->email ) && !empty( $this->tokenid ) && $this->is_valid_for_use();
+
+            // Checks if email is not empty.
+            $this->email == '' ? add_action( 'admin_notices', array( &$this, 'mail_missing_message' ) ) : '';
+
+            // Checks if token is not empty.
+            $this->tokenid == '' ? add_action( 'admin_notices', array( &$this, 'token_missing_message' ) ) : '';
+
+            // Filters.
+            add_filter( 'woocommerce_available_payment_gateways', array( &$this, 'hides_when_is_outside_brazil' ) );
+			
   		} //Fim da função __construct
 
 
@@ -71,7 +231,7 @@ function gateway_pagseguro(){
   		//Descrição: checa se o gateway está habilitado a disponível para o país do usuário
   		//---------------------------------------------------------------------------------------------------
   		function is_valid_for_use() {
-      		if (!in_array(get_option('woocommerce_currency'), array('AUD', 'BRL', 'CAD', 'MXN', 'NZD', 'HKD', 'SGD', 'USD', 'EUR', 'JPY', 'TRY', 'NOK', 'CZK', 'DKK', 'HUF', 'ILS', 'MYR', 'PHP', 'PLN', 'SEK', 'CHF', 'TWD', 'THB', 'GBP')))
+      		if (!in_array(get_option('woocommerce_currency'), array('BRL')))
       			return false;
       		return true;
   		} //Fim da função is_valid_for_use
@@ -113,6 +273,19 @@ function gateway_pagseguro(){
 						'type' => 'text',
 						'description' => __( 'Token gerado pelo PagSeguro para pagamento via API', 'woothemes' )
 					),
+					'usewcfields' => array(
+  						'title' => __( 'Utilizar Campos do WooCommerce Fields?', 'woothemes' ),
+  						'type' => 'checkbox',
+  						'label' => __( 'Se você instalou o <a href=\'http://wooplugins.com.br/loja/woocommerce-fields/\'>WooCommerceFields</a>, habilite este campo para permitir o uso dos campos adicionais.', 'woothemes' ),
+  						'default' => 'yes'
+  					),
+					'valid_address' => array(
+						'title' => __( 'Validate Address', 'woothemes' ),
+						'type' => 'checkbox',
+						'label' => __( 'Enable validation', 'woothemes' ),
+						'default' => 'yes',
+						'description' => __( 'Validates the customer\'s address in the format "street example, number".', 'woothemes' ),
+					),
 					'debug' => array(
 						'title' => __( 'Debug', 'woothemes' ),
 						'type' => 'checkbox',
@@ -134,8 +307,16 @@ function gateway_pagseguro(){
 	      		<p><?php _e('Opção para pagamento através do PagSeguro', 'woothemes'); ?></p>
 	      		<table class="form-table">
 	      		<?php
-	        		// Generate the HTML For the settings form.
-	        		$this->generate_settings_html();
+					if ( !$this->is_valid_for_use() ) {
+
+						// Valid currency.
+						echo '<div class="inline error"><p><strong>' . __( 'Gateway Disabled', 'woothemes' ) . '</strong>: ' . __( 'PagSeguro não suporte esta moeda.', 'woothemes' ) . '</p></div>';
+
+					} else {
+
+						// Generate the HTML For the settings form.
+						$this->generate_settings_html();
+					}
 	      		?>
 	      		</table><!--/.form-table-->
       		<?php
@@ -162,18 +343,26 @@ function gateway_pagseguro(){
       		global $woocommerce;
       		$order = &new woocommerce_order( $order_id );
 
+            // Fixed postal code.
+            $order->billing_postcode = str_replace( array( '-', ' ' ), '', $order->billing_postcode );
+
+            // Fixed Country.
+            if ( $order->billing_country == 'BR' ) {
+                $order->billing_country = 'BRA';
+            }
+			
+			
       		//Cria um objeto de requisição de pagamento e popula os dados
       		$paymentRequest = new PagSeguroPaymentRequest();
       		$paymentRequest->setCurrency("BRL");
       		$paymentRequest->setReference($order->id);
-      		$paymentRequest->setRedirectUrl($this->get_return_url($order));
+			//$paymentRequest->setRedirectUrl(urlencode(htmlspecialchars($this->get_return_url($order))));
+			$paymentRequest->setRedirectUrl($this->get_return_url($order));
+			//workaround to get tested in localhost
+      		if (in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1', '::1'))) {
+				$paymentRequest->setRedirectUrl(htmlspecialchars('http://wooplugins.com.br/'));
+			}
 
-			//telefone sempre estará no formato (99)9999-9999 ou (99)99999-9999
-			$telefone_ddd = substr($order->billing_phone,1,2); //retrieve ddd from parenthesis
-			$telefone = str_replace('-', '', substr($order->billing_phone,4)); //retrieve the rest of the telephone without the '-'
-			$nome_completo = utf8_decode($order->billing_first_name . " " . $order->billing_last_name);
-
-			$paymentRequest->setSender($nome_completo, $order->billing_email, $telefone_ddd, $telefone);
 
       		$item_loop = 0;
       		if (sizeof($order->get_items())>0){
@@ -196,23 +385,76 @@ function gateway_pagseguro(){
           			}
         		}
       		}
-
+			
+			//pagseguro api demands a shipping type, even if we are not using their shipping method
 			$CODIGO_PAC = PagSeguroShippingType::getCodeByType('PAC'); // 1
 			$paymentRequest->setShippingType($CODIGO_PAC);
 
-			//endereco sempre será validado como <logradouro>, <numero>, <bairro>
-			$endereco = explode(', ',$order->billing_address_1);
-			$paymentRequest->setShippingAddress(
-				$order->billing_postcode,
-				$order->billing_address_1,                              //logradouro
-				get_post_meta($order->id, '_billing_number', true),     //numero da casa
-				$order->billing_address_2,                              //complemento
-				get_post_meta($order->id, '_billing_district', true),   //bairro
-				$order->billing_city,
-				$order->billing_state,
-				$order->billing_country
-			);
+			//Sender information
+			$nome_completo = utf8_decode($order->billing_first_name . " " . $order->billing_last_name);
+			if($this->usewcfields == 'yes'){
+				//telefone sempre estará no formato (99)9999-9999 ou (99)99999-9999
+				$telefone_ddd = substr($order->billing_phone,1,2); //retrieve ddd from parenthesis
+				$telefone = str_replace('-', '', substr($order->billing_phone,4)); //retrieve the rest of the telephone without the '-'
+			} else {
+				//since we have no idea what's coming, strip everything and try to fit into the phone fields
+				$order->billing_phone = str_replace( array( '(', '-', ' ', ')' ), '', $order->billing_phone );
+				$telefone_ddd = substr( $order->billing_phone, 0, 2 );
+				$telefone = substr( $order->billing_phone, 2 );			
+			}
+			echo $telefone;
+			$paymentRequest->setSender($nome_completo, $order->billing_email, $telefone_ddd, $telefone);
+			
+			
+			if($this->usewcfields == 'yes'){
+			
+				//endereco sempre será validado como <logradouro>, <numero>, <bairro>
+				$endereco = explode(', ',$order->billing_address_1);
+				$paymentRequest->setShippingAddress(
+					$order->billing_postcode,
+					$order->billing_address_1,                              //logradouro
+					get_post_meta($order->id, '_billing_number', true),     //numero da casa
+					$order->billing_address_2,                              //complemento
+					get_post_meta($order->id, '_billing_district', true),   //bairro
+					$order->billing_city,
+					$order->billing_state,
+					$order->billing_country
+				);
+			} else {
 
+				// Fixed Address.
+				if ( $this->valid_address == 'yes' ) {
+					$order->billing_address_1 = explode( ',', $order->billing_address_1 );
+					
+					$paymentRequest->setShippingAddress(
+						$order->billing_postcode,
+						$order->billing_address_1[0],                           //logradouro
+						(int) $order->billing_address_1[1],                     //numero da casa
+						$order->billing_address_2,                              //complemento
+						'',                                                     //bairro
+						$order->billing_city,
+						$order->billing_state,
+						$order->billing_country
+					);
+					$address = array(
+						'shippingAddressStreet'     => $order->billing_address_1[0],
+						'shippingAddressNumber'     => (int) $order->billing_address_1[1],
+					);
+				} else {
+					$paymentRequest->setShippingAddress(
+						$order->billing_postcode,
+						$order->billing_address_1,                              //logradouro
+						0,                                                      //numero da casa
+						$order->billing_address_2,                              //complemento
+						'',                                                     //bairro
+						$order->billing_city,
+						$order->billing_state,
+						$order->billing_country
+					);
+				}
+
+
+			}
 
       		$paymentRequest->setExtraAmount(number_format($order->get_total_discount(),2,".","")*-1);
       		$credentials = new PagSeguroAccountCredentials($this->email, $this->tokenid);
@@ -276,8 +518,11 @@ function gateway_pagseguro(){
   		//Descrição: Página final antes de redirecionar para a página de pagamento do PagSeguro
   		//---------------------------------------------------------------------------------------------------
     	function receipt_page( $order ) {
+            global $woocommerce;
     		echo '<p>'.__('Obrigado pelo seu pedido. Por favor clique no botão "Pagar com PagSeguro" para finalizar o pagamento.', 'woothemes').'</p>';
     		echo $this->generate_pagseguro_form( $order );
+            // Remove cart.
+            $woocommerce->cart->empty_cart();
     	}
 
 
@@ -425,7 +670,82 @@ function gateway_pagseguro(){
         		}
       		}
     	} //Fim da função successful_request
-  	} //Fim da classe woocommerce_pagseguro
+        
+		
+		
+		/**
+         * Adds error message when not configured the email.
+         *
+         * @return string Error Mensage.
+         */
+        public function mail_missing_message() {
+            $message = '<div class="error">';
+                $message .= '<p>' . sprintf( __( '<strong>Gateway Disabled</strong> You should inform your email address in PagSeguro. %sClick here to configure!%s' , 'wcpagseguro' ), '<a href="' . get_admin_url() . 'admin.php?page=woocommerce_settings&amp;tab=payment_gateways">', '</a>' ) . '</p>';
+            $message .= '</div>';
+
+            echo $message;
+        }
+
+		
+		
+        /**
+         * Adds error message when not configured the token.
+         *
+         * @return string Error Mensage.
+         */
+        public function token_missing_message() {
+            $message = '<div class="error">';
+                $message .= '<p>' .sprintf( __( '<strong>Gateway Disabled</strong> You should inform your token in PagSeguro. %sClick here to configure!%s' , 'wcpagseguro' ), '<a href="' . get_admin_url() . 'admin.php?page=woocommerce_settings&amp;tab=payment_gateways">', '</a>' ) . '</p>';
+            $message .= '</div>';
+
+            echo $message;
+        }
+
+		
+		
+        /**
+         * Hides the PagSeguro with payment method with the customer lives outside Brazil
+         *
+         * @param  array $available_gateways Default Available Gateways.
+         *
+         * @return array                    New Available Gateways.
+         */
+        function hides_when_is_outside_brazil( $available_gateways ) {
+
+            if ( isset( $_REQUEST['country'] ) && $_REQUEST['country'] != 'BR' ) {
+
+                // Remove standard shipping option.
+                unset( $available_gateways['pagseguro'] );
+            }
+
+            return $available_gateways;
+        }
+
+		
+		
+        /**
+         * Valid address for street and number.
+         *
+         * @return void
+         */
+        function valid_address() {
+            global $woocommerce;
+
+            // Valid address format.
+            if ( $_POST['billing_address_1'] ) {
+
+                $address = $_POST['billing_address_1'];
+                $address = str_replace( ' ', '', $address );
+                $pattern = '/([^\,\d]*),([0-9]*)/';
+                $results = preg_match_all($pattern, $address, $out);
+
+                if ( empty( $out[2] ) || !is_numeric( $out[2][0] ) ) {
+                    $woocommerce->add_error( __( '<strong>Address</strong> format is invalid. Example of correct format: "Av. Paulista, 460"', 'wcpagseguro' ) );
+                }
+
+            }
+        }
+	} //Fim da classe woocommerce_pagseguro
 
 
 
